@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+      - release
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+
+      - name: Cache Rush
+        uses: actions/cache@v2
+        with:
+          path: |
+            common/temp/install-run
+            ~/.rush
+          key: ${{ runner.os }}-${{ hashFiles('rush.json') }}
+
+      - name: Cache pnpm
+        uses: actions/cache@v2
+        with:
+          path: |
+            common/temp
+          key: ${{ runner.os }}-${{ hashFiles('common/config/rush/pnpm-lock.yaml') }}
+
+      - name: Rush Change Verify
+        run: |
+          node common/scripts/install-run-rush.js change --verify -b ${{ github.ref_name }}
+      - name: Install dependencies
+        run: |
+          node common/scripts/install-run-rush.js install
+      - name: Build And Publish package
+        run: |
+          node common/scripts/install-run-rush.js build
+          node common/scripts/install-run-rush.js version --bump --target-branch [source-branch]
+          node common/scripts/install-run-rush.js publish --tag canary --publish --include-all --add-commit-details --set-access-level public --target-branch master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create a Github Release / Tag
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: release
+          prerelease: true
+          title: Build ${{ github.ref_name }} CI
